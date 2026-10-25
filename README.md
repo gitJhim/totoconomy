@@ -59,3 +59,5 @@ ctest --test-dir build/sanitize --output-on-failure
 ```
 
 See the [executed results](docs/RESULTS.md), [model](docs/MODEL.md), [architecture and decisions](docs/ARCHITECTURE.md), [formats](docs/FORMATS.md), [determinism](docs/DETERMINISM.md), [verification](docs/VERIFICATION.md), [performance](docs/PERFORMANCE.md), and [roadmap/status](docs/ROADMAP.md). The original implementation plan is in [PLAN.md](docs/PLAN.md).
+
+Licensed under the [MIT License](LICENSE). The vendored nlohmann/json library retains its [MIT license and copyright notice](third_party/nlohmann/LICENSE.MIT).
