@@ -1,0 +1,47 @@
+# Model specification
+
+## Units and boundary
+
+`Money`, `Quantity`, `UnitPrice`, `Day` and `Minutes` are explicit semantic signed 64-bit aliases at domain fields/interfaces; `EntityId` and `ProductId` are validated string roles. `Amount` is the shared checked-arithmetic storage type. These aliases do not enforce dimensional safety at compile time; named fields, validated product maps, and explicit invoice operations separate their meanings. Money is cents, price is cents per whole unit, each product has its own whole-unit stock, travel is minutes per checkout trip, and `time_value` is a perceived cents/minute score weight. There is no fractional invoicing or rounding. Checked addition/multiplication rejects overflow. JSON numeric tokens are exact integers (see formats). No float affects any decision; floating point is used only for performance reporting.
+
+The world is closed and cash-only: total scenario cash belongs to the declared accounts and stays conserved. Initial inventories are endowments of their owners. Empty-input producer recipes create renewable output using paid eligible labor and finite daily capacity; they explicitly represent renewable sources, not an unrecorded stock injection. Nonempty recipes subtract each integer input coefficient per unit output. Goods are consumed by households. No other inflow, outflow, disposal or spoilage exists.
+
+For each product, closing stock equals opening stock + production outputs - recipe inputs - household consumption. Internal trades cancel. In-transit reservations are already in seller stock and are counted once. Unlike products are never summed as one physical quantity. No reported measure is labeled GDP, profit or welfare.
+
+## Daily phases
+
+1. A branch intervention applies once at the start boundary, before any daily operation.
+2. Previously reserved orders arriving today settle, in creation order.
+3. Firms in normalized ID order validate their entire fixed payroll and minimum labor. If finance or labor is insufficient, the firm is inactive for the day. No debt or unpaid production is created. Eligible firms pay all their workers; all firms' payroll precedes production. A paid firm may have no usable inputs and still pay its committed workers. Production is bounded by declared capacity and unreserved inputs. Retail payroll is a fixed staffing commitment with no physical output. Work inactivity prevents new production; it does not prevent automatic liquidation of already-owned stock or placing a feasible procurement order. Storefront labor throughput/opening hours are not modeled in this foundation.
+4. Each firm's targets in product-key order determine procurement. Desired quantity is target minus on-hand and incoming stock. Order size is reduced **before proposing a trade** to feasible cash and supplier unreserved stock. Each resulting request is full-fill. Prices are current supplier quotes. Lead time zero settles immediately; positive lead time reserves until the exact future day.
+5. Information publication refreshes memories as described below.
+6. Households shop in a rotating order: sorted household array starting at `day % count`. Products follow sorted need-map order. A household requests its daily need minus goods already held, shares one daily cash budget and time budget across products, and may choose no purchase.
+7. Households consume up to each product target and record the remaining unmet units. Unmet needs do not accumulate into future demand or cause mortality.
+8. Firms update posted prices for the next day.
+9. Metrics, invariant checks, display exports and requested complete-boundary checkpoints are written.
+
+## Information and shopping
+
+Households start with `known_shops` and initial observations of those shops at time -1. The directory reveals retailer IDs, product availability in the catalog, and configured trip durations, **not hidden prices or stock**. Unknown offers are exclusions, not feasible alternatives.
+
+Local notices refresh every `refresh_days` (including day zero). Every positive `explore_days` boundary, a seeded directory notice reveals one retailer's current offers. These are modeled cost-free information notices, not physical searches. They can reveal a previously unknown shop or refresh stockouts. The public-board mode publishes all current offers each day. There are no advertisements, rumors or social networks.
+
+Each observation identifies shop/product, price, unreserved stock, day and source (`initial_visit`, `local_notice`, `directory_notice`, `public_board`, `checkout`). A checkout updates all offers at that shop. Memories remain independent of true current state.
+
+An offer is perceived feasible if remembered stock covers the whole quantity, remembered invoice fits available cash and remaining daily budget, and trip minutes fit remaining time. Score = remembered invoice + trip minutes × `time_value`. Select the lowest `(score, shop ID)` pair. No feasible offer yields `NO_FEASIBLE_OPTION`. Unknown/insufficient/stockout/budget/time exclusions are separate from `alternatives`.
+
+Checkout consumes configured trip time even if the purchase fails. It refreshes the observation, records `STALE_PRICE` when applicable, rechecks the actual invoice against remaining budget, and executes a full-fill trade only if real available cash and unreserved stock suffice. Travel is a perceived cost and a time constraint, **not a cash charge**. No same-day fallback search is implemented after a failed checkout. Sales, rejected attempts, and unmet needs are distinct facts. A remembered stockout may exclude an option without an actual checkout attempt; this is not counted as a failed transaction.
+
+## Firm policies
+
+Employment and wages remain fixed. No firm permanently closes in this stage; lack of finance produces explicit paid-work inactivity. Existing-stock sales and feasible orders may continue while workers are unpaid and perform no modeled work. Retail transaction settlement is an automatic transfer, not a hidden unpaid production recipe. Capacity is whole output units/day at the required labor threshold; extra workers do not increase it. Recipes may use stored inputs, but no within-day recursive production or priority optimizer exists.
+
+`fixed` leaves prices unchanged. `inventory_band` updates at day end: if closing on-hand stock is less than integer `target/2`, raise price by `price_step`, capped at `price_max`; if stock exceeds target, reduce by step, floored at `price_min`; otherwise hold. Zero target therefore has no scarcity increase. The policy uses stock, not estimated demand or assumed zero demand during stockouts. Parameters and initial prices must be valid. No favorable intervention outcome is guaranteed.
+
+## Scenarios
+
+`accounting_cycle.json`: 6 households, 1 renewable food producer, 1 retailer. Three employees per firm at 1,000 cents/day; producer capacity 6; wholesale price 500; retail price 1,000; retailer target 6 and immediate procurement. Opening producer/retailer cash 3,000/6,000, all household cash and goods zero. After payroll: firm cash 0/3,000, household cash 1,000 each. After wholesale: firm cash 3,000/0. After shopping: firm cash 3,000/6,000 and household cash zero. After consumption: all stock zero. Each day repeats without rescue. Thirty days produce and consume 180 food units with no unmet needs and 9,000 total cents.
+
+`demo_town.json`: 24 households, 4 firms, 2 independent renewable products (`food`, `fruit`), 6 employees per firm. Each producer creates at most 24 units/day at a 250-cent wholesale quote. Retailers start at 550/450, have different 1/2-day delivery leads and 8/12-minute trips, 36-unit inventory targets per product and bounded 350–650-cent inventory pricing. Eighteen households initially know the more expensive retailer, six the other. Each household starts with 3,000 cents, earns 1,000/day when paid, needs one of each product, and has a 1,200-cent/40-minute budget. Working capital: 40,000 per producer, 80,000 per retailer, plus finite initial producer stock 24 of its output and each retailer's stock 24 of each product. Total initial cash is 312,000 cents. Local refresh every 3 days, directory notices every 11. Initialization intentionally finances payroll, lead times and first orders. There is no hidden rescue. Actual shortages/inactivity over the measured baseline are reported in performance/results rather than suppressed.
+
+Payroll, production, procurement and posted-price policies record structured firm decisions as well as household decisions. Each captures permitted own-state/quoted inputs, constraints, feasible action, excluded larger/ineligible actions where applicable, policy version, outcome and resulting event/order links. No-output/no-order/unchanged-price decisions are retained instead of silently implying success.

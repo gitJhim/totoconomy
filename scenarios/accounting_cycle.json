@@ -1,0 +1,112 @@
+{
+  "schema": "scenario-1",
+  "name": "Hand-checkable closed accounting cycle",
+  "products": [
+    "food"
+  ],
+  "refresh_days": 1,
+  "explore_days": 7,
+  "households": [
+    {
+      "id": "household:1",
+      "cash": 0,
+      "employer": "firm:1",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    },
+    {
+      "id": "household:2",
+      "cash": 0,
+      "employer": "firm:1",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    },
+    {
+      "id": "household:3",
+      "cash": 0,
+      "employer": "firm:1",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    },
+    {
+      "id": "household:4",
+      "cash": 0,
+      "employer": "firm:2",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    },
+    {
+      "id": "household:5",
+      "cash": 0,
+      "employer": "firm:2",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    },
+    {
+      "id": "household:6",
+      "cash": 0,
+      "employer": "firm:2",
+      "budget": 1000,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:2"
+      ]
+    }
+  ],
+  "firms": [
+    {
+      "id": "firm:1",
+      "kind": "producer",
+      "cash": 3000,
+      "wage": 1000,
+      "capacity": 6,
+      "labor_required": 3,
+      "output": "food",
+      "prices": {
+        "food": 500
+      }
+    },
+    {
+      "id": "firm:2",
+      "kind": "retailer",
+      "cash": 6000,
+      "wage": 1000,
+      "prices": {
+        "food": 1000
+      },
+      "targets": {
+        "food": 6
+      },
+      "suppliers": {
+        "food": "firm:1"
+      }
+    }
+  ]
+}

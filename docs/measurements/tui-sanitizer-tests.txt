@@ -1,0 +1,7 @@
+Test project /home/jhim/proj/totoconomy/build/sanitize
+    Start 6: tui_acceptance
+1/1 Test #6: tui_acceptance ...................   Passed   24.59 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =  24.59 sec

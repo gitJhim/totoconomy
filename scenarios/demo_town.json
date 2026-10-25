@@ -1,0 +1,460 @@
+{
+  "schema": "scenario-1",
+  "name": "Two foods, two stores, incomplete information",
+  "products": [
+    "food",
+    "fruit"
+  ],
+  "refresh_days": 3,
+  "explore_days": 11,
+  "households": [
+    {
+      "id": "household:1",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:2",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:3",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:4",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:5",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:6",
+      "cash": 3000,
+      "employer": "firm:1",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:7",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:8",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:9",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:10",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:11",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:12",
+      "cash": 3000,
+      "employer": "firm:2",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:13",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:14",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:15",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:16",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:17",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:18",
+      "cash": 3000,
+      "employer": "firm:3",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:19",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:20",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:21",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:22",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:23",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:24",
+      "cash": 3000,
+      "employer": "firm:4",
+      "budget": 1200,
+      "needs": {
+        "food": 1,
+        "fruit": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    }
+  ],
+  "firms": [
+    {
+      "id": "firm:1",
+      "kind": "producer",
+      "cash": 40000,
+      "stock": {
+        "food": 24
+      },
+      "wage": 1000,
+      "capacity": 24,
+      "labor_required": 6,
+      "output": "food",
+      "prices": {
+        "food": 250
+      }
+    },
+    {
+      "id": "firm:2",
+      "kind": "producer",
+      "cash": 40000,
+      "stock": {
+        "fruit": 24
+      },
+      "wage": 1000,
+      "capacity": 24,
+      "labor_required": 6,
+      "output": "fruit",
+      "prices": {
+        "fruit": 250
+      }
+    },
+    {
+      "id": "firm:3",
+      "kind": "retailer",
+      "cash": 80000,
+      "stock": {
+        "food": 24,
+        "fruit": 24
+      },
+      "wage": 1000,
+      "prices": {
+        "food": 550,
+        "fruit": 550
+      },
+      "targets": {
+        "food": 36,
+        "fruit": 36
+      },
+      "suppliers": {
+        "food": "firm:1",
+        "fruit": "firm:2"
+      },
+      "lead_days": 1,
+      "travel_minutes": 8,
+      "price_policy": "inventory_band",
+      "price_min": 350,
+      "price_max": 650,
+      "price_step": 10
+    },
+    {
+      "id": "firm:4",
+      "kind": "retailer",
+      "cash": 80000,
+      "stock": {
+        "food": 24,
+        "fruit": 24
+      },
+      "wage": 1000,
+      "prices": {
+        "food": 450,
+        "fruit": 450
+      },
+      "targets": {
+        "food": 36,
+        "fruit": 36
+      },
+      "suppliers": {
+        "food": "firm:1",
+        "fruit": "firm:2"
+      },
+      "lead_days": 2,
+      "travel_minutes": 12,
+      "price_policy": "inventory_band",
+      "price_min": 350,
+      "price_max": 650,
+      "price_step": 10
+    }
+  ]
+}

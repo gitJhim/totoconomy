@@ -1,0 +1,15 @@
+Test project /home/jhim/proj/totoconomy/build/debug
+    Start 1: core_acceptance
+1/5 Test #1: core_acceptance ..................   Passed   32.75 sec
+    Start 2: cli_help
+2/5 Test #2: cli_help .........................   Passed    0.00 sec
+    Start 3: cli_version
+3/5 Test #3: cli_version ......................   Passed    0.00 sec
+    Start 4: cli_validate
+4/5 Test #4: cli_validate .....................   Passed    0.01 sec
+    Start 5: cli_acceptance
+5/5 Test #5: cli_acceptance ...................   Passed   11.62 sec
+
+100% tests passed out of 5
+
+Total Test time (real) =  44.38 sec
