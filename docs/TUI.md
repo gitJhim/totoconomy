@@ -21,22 +21,23 @@ The equivalent direct CLI commands are:
 ./build/release/econ tui --run runs/baseline --no-color
 ```
 
-With no path, `econ tui` browses `./runs` relative to the current directory. The helper always browses this project's `runs/`; its explicit relative run path is interpreted from your current working directory. Run discovery includes bounded nested experiment folders and lists their statuses. Only completed runs can be opened. If none exist, exit and run `./scripts/dev.sh start`, then reopen the inspector. `R` refreshes the browser.
+With no path, `econ tui` browses `./runs` relative to the current directory. The helper always browses this project's `runs/`; its explicit relative run path is interpreted from your current working directory. Run discovery includes bounded nested experiment folders and lists their statuses. Only completed runs can be opened. Press `n` in the run list to create a run, including when no runs exist. Choose a scenario, seed, duration and fixed/dynamic employment, then Start run. Left/Right or Space toggles Employment. New outputs go under the browsed runs directory; existing outputs cannot be overwritten. `R` refreshes the browser.
 
 ## Navigation
 
 | Key | Action |
 | --- | --- |
-| `1`–`5`, Tab, Shift-Tab | Runs, Overview, Entities, Decisions, Events |
+| `1`–`7`, Tab, Shift-Tab | Runs, Overview, Entities, Decisions, Events, Labor, Ledger |
 | Up/Down or `j`/`k` | Select a row; scroll Overview, Help or a full record |
 | Page Up/Down, Home/End | Page or jump through the current list/record |
-| Enter | Open selected run or complete entity/event/decision evidence |
+| Enter | Open selected run or evidence; drill from Ledger into entity transactions and then event details |
 | `[` / `]`, Left/Right or `h`/`l` | Previous / next recorded day boundary |
 | `g` | Enter an exact day boundary within this run |
 | `0` / `G` | Opening / final boundary |
 | `/` | Case-insensitive filter of the current list (Overview opens Entities) |
 | `i` | Find exact `household:N`, `firm:N`, `decision:N` or `event:N` |
-| `d` / `e` on an entity | Its decisions / events for the selected day |
+| `n` in Runs | Open the new-run form |
+| `d` / `e` on an entity or ledger row | Its decisions / events for the selected day |
 | Esc | Back, cancel input, or clear text/actor filters |
 | `m` | Inspect the actual manifest |
 | `v` | Perform independent persisted-record verification now |
@@ -62,7 +63,7 @@ The inspector requires an interactive ANSI-compatible terminal on both stdin and
 
 Styling inherits terminal foreground/background and monospaced font. Inverse selection and `>` indicate focus; labels, not color alone, communicate status. `--no-color` or a present `NO_COLOR` environment variable disables the cyan accent. No mouse, clipboard, graphical session, ncurses installation or online service is needed.
 
-`econ_tui` is a separate reader/interface library linked by the CLI. It indexes byte offsets and record counts **by day** for replay, metrics, decisions and events; it keeps current snapshots and one day's parsed records, not the whole event history. Opening/indexing large runs and on-demand full-history ID lookup/verification may take time. It is a completed-run inspector, not a live simulation controller. It cannot edit, advance, branch, or repair a run.
+`econ_tui` is a separate reader/interface library linked by the CLI. It indexes byte offsets and record counts **by day** for replay, metrics, decisions and events; it keeps current snapshots and one day's parsed records, not the whole event history. Opening/indexing large runs and on-demand full-history ID lookup/verification may take time. It inspects completed runs and can launch a separate new run. Launching runs synchronously and displays a progress message. It cannot edit, advance, branch, or repair an existing run. See [employment and ledger views](employment.md).
 
 ## Interface direction and quality bar
 

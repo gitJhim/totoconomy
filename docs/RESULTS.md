@@ -1,5 +1,7 @@
 # Foundation completion evidence
 
+These measurements describe the original `econ-1` foundation. Current `econ-2` employment behavior and integration checks are documented in [employment.md](employment.md).
+
 Source/build: `0.1.0-20b9e645bf668c71`, model `econ-1`; GCC 16.2.1, CMake 4.4.4, x86-64 Linux. Standard dependencies are contained in the source tree. A separate source-only copy with only CMake, include, src, tests, scenarios and third_party built and passed tests from a fresh Release build directory. CMake/build/test contain no download step; network isolation was not imposed on that source-copy check.
 
 ## Executed gates

@@ -17,7 +17,8 @@ Usage: ./scripts/dev.sh COMMAND [OPTION]
   help                          Show this help.
 
 start runs accounting, the 60-day town, day-30 resume/no-op/price-board
-continuations, inspection, explanation, comparison, and verification.
+continuations, the labor-market scenario with fixed and dynamic employment,
+inspection, explanation, comparison, and verification.
 It preserves existing outputs. By default, it creates a unique directory
 under the project's runs/; an explicit output directory must not exist.
 Relative output paths are resolved from your current working directory.
@@ -103,6 +104,19 @@ start_demo() {
         --intervention "$PROJECT_ROOT/scenarios/interventions/public_price_board.json" \
         --until-day 60 --trace audit --out "$output/price_board" > "$reports/price-board.json"
 
+    progress "Running the labor market with fixed and dynamic employment"
+    "$econ" validate --scenario "$PROJECT_ROOT/scenarios/labor_market.json" --json > "$reports/validate-labor.json"
+    "$econ" run --scenario "$PROJECT_ROOT/scenarios/labor_market.json" --seed 7 \
+        --until-day 40 --checkpoint-every-days 10 --trace audit --employment fixed \
+        --out "$output/labor_fixed" > "$reports/labor-fixed.json"
+    "$econ" run --scenario "$PROJECT_ROOT/scenarios/labor_market.json" --seed 7 \
+        --until-day 40 --checkpoint-every-days 10 --trace audit --employment dynamic \
+        --out "$output/labor_dynamic" > "$reports/labor-dynamic.json"
+    "$econ" inspect --run "$output/labor_dynamic" --entity household:1 --json > "$reports/labor-household-1.json"
+    "$econ" verify --run "$output/labor_dynamic" --json > "$reports/verification-labor-dynamic.json"
+    "$econ" compare --baseline "$output/labor_fixed" --variant "$output/labor_dynamic" \
+        --from-day 0 --until-day 40 --json > "$reports/labor-comparison.json"
+
     progress "Verifying and comparing continuations"
     "$econ" verify --run "$output/baseline" --json > "$reports/verification.json"
     "$econ" compare --baseline "$output/baseline" --variant "$output/resumed" \
@@ -114,6 +128,7 @@ start_demo() {
 
     printf '\nDemo complete.\nRun artifacts: %s\nJSON reports: %s\n' "$output" "$reports"
     printf 'Inspect a household:\n  %q inspect --run %q --entity household:7 --json\n' "$econ" "$output/baseline"
+    printf 'Browse the dynamic-employment run (6 Labor view):\n  %q tui --run %q\n' "$econ" "$output/labor_dynamic"
 }
 
 command="${1:-help}"

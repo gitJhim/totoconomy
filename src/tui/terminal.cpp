@@ -188,9 +188,9 @@ int launch(const Options &options) {
         }
         auto key = terminal.read_key();
         if (!key.empty()) {
-            if (key == "ENTER" || key == "v" || key == "R") {
+            if (auto note = inspector.wait_message(key); !note.empty()) {
                 Frame wait(size.first - 1, size.second);
-                wait.put(1, 2, "Reading recorded artifacts...", Ink::Bold);
+                wait.put(1, 2, note, Ink::Bold);
                 output(wait.ansi(options.color));
             }
             running = inspector.key(key);

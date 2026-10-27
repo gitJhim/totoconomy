@@ -1,0 +1,303 @@
+{
+  "schema": "scenario-1",
+  "name": "Labor market: a thinly financed producer, a hiring producer with an experience requirement, two unemployed households",
+  "products": [
+    "food"
+  ],
+  "refresh_days": 2,
+  "explore_days": 5,
+  "employment": {
+    "notice_days": 1,
+    "demand_window_days": 4,
+    "inventory_cover_days": 2,
+    "payroll_runway_days": 3,
+    "job_preferences": {
+      "reservation_wage": 0,
+      "min_wage_gain": 0,
+      "min_wage_gain_percent": 10,
+      "min_tenure_days": 5,
+      "search_while_employed": true,
+      "unpaid_tolerance_days": 3
+    }
+  },
+  "households": [
+    {
+      "id": "household:1",
+      "cash": 2000,
+      "employer": "firm:1",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:2",
+      "cash": 2000,
+      "employer": "firm:1",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:3",
+      "cash": 2000,
+      "employer": "firm:1",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:4",
+      "cash": 2000,
+      "employer": "firm:1",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:5",
+      "cash": 2000,
+      "employer": "firm:2",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1,
+      "job_preferences": {
+        "search_while_employed": false
+      }
+    },
+    {
+      "id": "household:6",
+      "cash": 2000,
+      "employer": "firm:2",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:7",
+      "cash": 2000,
+      "employer": "firm:3",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1,
+      "job_preferences": {
+        "min_wage_gain_percent": 25,
+        "min_tenure_days": 2
+      }
+    },
+    {
+      "id": "household:8",
+      "cash": 2000,
+      "employer": "firm:3",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:9",
+      "cash": 2000,
+      "employer": "firm:4",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:10",
+      "cash": 2000,
+      "employer": "firm:4",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:4"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:11",
+      "cash": 4000,
+      "employer": "",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1
+    },
+    {
+      "id": "household:12",
+      "cash": 4000,
+      "employer": "",
+      "budget": 900,
+      "needs": {
+        "food": 1
+      },
+      "known_shops": [
+        "firm:3"
+      ],
+      "time_minutes": 40,
+      "time_value": 1,
+      "job_preferences": {
+        "reservation_wage": 1050
+      }
+    }
+  ],
+  "firms": [
+    {
+      "id": "firm:1",
+      "kind": "producer",
+      "cash": 14000,
+      "stock": {
+        "food": 8
+      },
+      "wage": 1000,
+      "capacity": 8,
+      "labor_required": 4,
+      "output": "food",
+      "prices": {
+        "food": 350
+      },
+      "hiring": {
+        "wage_step": 100,
+        "wage_min": 800,
+        "wage_max": 1200,
+        "min_experience_days": 0,
+        "accept_employed": false,
+        "rehire_cooldown_days": 3
+      }
+    },
+    {
+      "id": "firm:2",
+      "kind": "producer",
+      "cash": 80000,
+      "stock": {
+        "food": 6
+      },
+      "wage": 1000,
+      "capacity": 12,
+      "labor_required": 3,
+      "positions": 6,
+      "output": "food",
+      "prices": {
+        "food": 350
+      },
+      "output_per_worker": 2,
+      "hiring": {
+        "wage_step": 100,
+        "wage_min": 900,
+        "wage_max": 1300,
+        "raise_after_unfilled_days": 2,
+        "min_experience_days": 2,
+        "accept_employed": true,
+        "rehire_cooldown_days": 2
+      }
+    },
+    {
+      "id": "firm:3",
+      "kind": "retailer",
+      "cash": 30000,
+      "stock": {
+        "food": 10
+      },
+      "wage": 800,
+      "prices": {
+        "food": 700
+      },
+      "targets": {
+        "food": 16
+      },
+      "suppliers": {
+        "food": "firm:1"
+      },
+      "lead_days": 1,
+      "travel_minutes": 8,
+      "price_policy": "inventory_band",
+      "price_min": 450,
+      "price_max": 800,
+      "price_step": 10
+    },
+    {
+      "id": "firm:4",
+      "kind": "retailer",
+      "cash": 30000,
+      "stock": {
+        "food": 10
+      },
+      "wage": 800,
+      "prices": {
+        "food": 650
+      },
+      "targets": {
+        "food": 16
+      },
+      "suppliers": {
+        "food": "firm:2"
+      },
+      "lead_days": 1,
+      "travel_minutes": 12,
+      "price_policy": "inventory_band",
+      "price_min": 450,
+      "price_max": 800,
+      "price_step": 10,
+      "positions": 3
+    }
+  ]
+}

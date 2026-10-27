@@ -86,7 +86,9 @@ Loaded load_checkpoint(const fs::path &p) {
             throw Error(4, "checkpoint state digest mismatch");
         validate_state(s, normalized);
         // Fixed model structure must match scenario, while memories/prices may evolve.
-        auto base = initial(normalized, s.seed);
+        if (!valid_employment_mode(s.employment_mode))
+            throw Error(4, "checkpoint employment mode unknown");
+        auto base = initial(normalized, s.seed, s.employment_mode);
         if (base.accounts.size() != s.accounts.size() || base.households.size() != s.households.size() ||
             base.firms.size() != s.firms.size())
             throw Error(4, "checkpoint entity mismatch");
@@ -96,15 +98,24 @@ Loaded load_checkpoint(const fs::path &p) {
                 throw Error(4, "checkpoint accounts mismatch");
         for (std::size_t i = 0; i < base.households.size(); ++i) {
             auto actual = Json(s.households[i]), expected = Json(base.households[i]);
-            for (auto key : {"knowledge", "known_shops"}) {
+            // Memories and payroll streaks evolve; under dynamic employment so does the employer.
+            for (auto key : {"knowledge", "known_shops", "unpaid_days"}) {
                 actual.erase(key);
                 expected.erase(key);
+            }
+            if (s.employment_mode == employment_dynamic) {
+                actual.erase("employer");
+                expected.erase("employer");
             }
             if (actual != expected)
                 throw Error(4, "checkpoint household config mismatch");
         }
         for (std::size_t i = 0; i < base.firms.size(); ++i) {
             auto actual = Json(s.firms[i]), expected = Json(base.firms[i]);
+            for (auto key : {"payroll_missed_days", "demand_history"}) {
+                actual.erase(key);
+                expected.erase(key);
+            }
             if (s.firms[i].prices.size() != base.firms[i].prices.size())
                 throw Error(4, "checkpoint prices mismatch");
             for (auto &[product, price] : s.firms[i].prices) {
@@ -139,7 +150,9 @@ static bool ancestor(const fs::path &a, const fs::path &b) {
 }
 Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
     auto scenario = normalize(config);
-    State s = opt.loaded ? opt.loaded->state : initial(scenario, seed);
+    if (!valid_employment_mode(opt.employment))
+        throw Error(2, "employment must be fixed or dynamic");
+    State s = opt.loaded ? opt.loaded->state : initial(scenario, seed, opt.employment);
     if (opt.loaded && scenario != opt.loaded->scenario)
         throw Error(4, "resume scenario mismatch");
     if (opt.until < s.next_day || opt.until > 10000000 || opt.checkpoint_every < 0)
@@ -176,6 +189,7 @@ Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
         {"from_day", s.next_day},
         {"until_day", opt.until},
         {"trace", opt.trace},
+        {"employment", s.employment_mode},
         {"parent", opt.loaded ? Json{{"run", opt.loaded->parent_run},
                                      {"checkpoint_digest", opt.loaded->checkpoint_digest},
                                      {"state_digest", digest(Json(s))}}
@@ -185,6 +199,7 @@ Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
          {"scenario.normalized.json", "initial_state.json", "events.jsonl", "decisions.jsonl",
           "metrics.jsonl", "replay.jsonl", "final_state.json", "verification.json", "checkpoints/"}}};
     manifest["run_id"] = digest(Json{{"origin", origin},
+                                     {"employment", s.employment_mode},
                                      {"initial", digest(Json(s))},
                                      {"intervention", manifest["intervention"]},
                                      {"until", opt.until}});
@@ -222,9 +237,15 @@ Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
                             {"next_day", engine.state.next_day},
                             {"accounts", engine.state.accounts},
                             {"firms", engine.state.firms},
-                            {"households", Json::array()}};
+                            {"households", Json::array()},
+                            {"pending_changes", engine.state.pending_changes},
+                            {"board", engine.state.board}};
             for (auto &h : engine.state.households)
-                display["households"].push_back({{"id", h.id}, {"employer", h.employer}, {"needs", h.needs}});
+                display["households"].push_back({{"id", h.id},
+                                                 {"employer", h.employer},
+                                                 {"needs", h.needs},
+                                                 {"unpaid_days", h.unpaid_days},
+                                                 {"job_preferences", h.job_preferences}});
             timed(replay, display);
             if (opt.checkpoint_every && engine.state.next_day % opt.checkpoint_every == 0) {
                 std::ostringstream name;
@@ -252,6 +273,7 @@ Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
             {"decisions", decisions_count},
             {"decisions_per_second", elapsed > 0 ? static_cast<double>(decisions_count) / elapsed : 0.0},
             {"days_per_second", elapsed > 0 ? static_cast<double>(opt.until - s.next_day) / elapsed : 0.0},
+            {"employment_changes", engine.state.next_change - s.next_change},
             {"peak_rss_kib", usage.ru_maxrss},
             {"households", s.households.size()},
             {"firms", s.firms.size()}};
@@ -277,6 +299,8 @@ Json run(const Json &config, std::uint64_t seed, const RunOptions &opt) {
     }
 }
 static void inc(Json &j, const std::string &k, Amount n) {
+    if (j.is_null())
+        j = Json::object();
     j[k] = add(j.value(k, Amount{0}), n);
 }
 Json verify(const fs::path &dir) {
@@ -288,7 +312,8 @@ Json verify(const fs::path &dir) {
          scenario = normalize(read_json(dir / "scenario.normalized.json")),
          start = read_json(dir / "initial_state.json"), finish = read_json(dir / "final_state.json");
     if (manifest.at("schema") != "manifest-1" || manifest.at("model") != model_version ||
-        start.at("schema") != "state-1" || finish.at("schema") != "state-1")
+        start.at("schema") != "state-1" || finish.at("schema") != "state-1" ||
+        start.at("model") != model_version || finish.at("model") != model_version)
         throw Error(4, "unsupported run/state schema");
     auto initial_state = start.at("state").get<State>(), final_state = finish.at("state").get<State>();
     validate_state(initial_state, scenario);
@@ -305,6 +330,8 @@ Json verify(const fs::path &dir) {
                 digest(Json{{"scenario", scenario}, {"seed", initial_state.seed}, {"model", model_version}}));
     check("interval", manifest.at("from_day") == initial_state.next_day &&
                           manifest.at("until_day") == final_state.next_day);
+    check("employment_mode", manifest.at("employment") == initial_state.employment_mode &&
+                                 initial_state.employment_mode == final_state.employment_mode);
     auto reconstructed = initial_state;
     std::uint64_t sequence = initial_state.next_event;
     Day expected_day = initial_state.next_day;
@@ -326,8 +353,37 @@ Json verify(const fs::path &dir) {
     std::map<std::string, Order> pending;
     for (auto &o : initial_state.orders)
         pending[o.id] = o;
+    std::map<std::string, EmploymentChange> pending_changes;
+    for (auto &c : initial_state.pending_changes)
+        pending_changes[c.id] = c;
+    auto change_sequence = initial_state.next_change, employment_sequence = initial_state.next_employment,
+         posting_sequence = initial_state.next_posting;
+    auto posting_of = [&](const std::string &id) -> Posting * {
+        for (auto &p : reconstructed.board)
+            if (p.id == id)
+                return &p;
+        return nullptr;
+    };
+    auto open_wage = [&](const std::string &household) -> std::optional<Money> {
+        for (auto &r : reconstructed.employment)
+            if (r.household == household && r.end == -1)
+                return r.wage;
+        return {};
+    };
+    const auto demand_window =
+        static_cast<std::size_t>(integer(scenario.at("employment").at("demand_window_days")));
+    // Search outcomes are decisions, not ledger events: the metrics scan keeps what it reads so the
+    // decision scan below can reconcile it (job_search totals and each person's search record).
+    std::map<Day, Json> recorded_search, recorded_person_search, recorded_applications;
+    auto household_of = [&](const std::string &id) -> Household & {
+        for (auto &h : reconstructed.households)
+            if (h.id == id)
+                return h;
+        throw Error(4, "unknown household in event log: " + id);
+    };
+    const bool dynamic = initial_state.employment_mode == employment_dynamic;
     Amount event_count = 0, metric_count = 0;
-    bool ledger_ok = true, metrics_ok = true, orders_ok = true, semantics_ok = true;
+    bool ledger_ok = true, metrics_ok = true, orders_ok = true, semantics_ok = true, labor_ok = true;
     Json totals = {
         {"production", Json::object()}, {"consumption", Json::object()}, {"unmet", Json::object()}};
     scan_lines(dir / "metrics.jsonl", [&](const Json &metric) {
@@ -337,13 +393,20 @@ Json verify(const fs::path &dir) {
         Json production = Json::object(), consumption = Json::object(), unmet = Json::object(),
              flow = Json::object(), sales = {{"retail", 0}, {"wholesale", 0}},
              units = {{"retail", Json::object()}, {"wholesale", Json::object()}}, realized = Json::array();
-        Amount wages = 0, paid = 0, failed = 0, stockouts = 0;
-        std::set<std::string> paid_households, producing_firms;
+        Amount wages = 0, paid = 0, failed = 0, stockouts = 0, hires = 0, separations = 0;
+        std::set<std::string> paid_households, producing_firms, changed_today;
+        std::map<std::string, Amount> paid_amount;
         std::map<std::pair<std::string, std::string>, Amount> consumed_by, unmet_by;
+        Json inactive = Json::object(), labor = Json::object(), board_activity = Json::array(),
+             labor_units = {{"delivered", 0}, {"used", 0}, {"idle", 0}, {"retail_service", 0}},
+             labor_flow = Json::object();
+        std::map<std::string, Amount> sold, shortfall;
+        std::set<std::string> applied;
+        Json search_from_events = {{"applied", 0}, {"hires", 0}, {"switches", 0}, {"quits", 0}};
         int phase_rank = -1;
-        const std::map<std::string, int> phases = {{"intervention", 0}, {"arrivals", 1},    {"work", 2},
-                                                   {"procurement", 3},  {"information", 4}, {"shopping", 5},
-                                                   {"consumption", 6},  {"pricing", 7}};
+        const std::map<std::string, int> phases = {
+            {"intervention", 0}, {"arrivals", 1}, {"employment", 2},  {"work", 3},   {"procurement", 4},
+            {"information", 5},  {"shopping", 6}, {"consumption", 7}, {"pricing", 8}};
         while (next && integer(next->at("day")) == day) {
             auto e = *next;
             auto type = e.at("type").get<std::string>();
@@ -354,6 +417,8 @@ Json verify(const fs::path &dir) {
                 ledger_ok = false;
             else
                 phase_rank = phases.at(phase);
+            if (!dynamic && phase == "employment")
+                ledger_ok = false;
             if (e.at("schema") != "event-1" || e.at("id") != "event:" + std::to_string(sequence++))
                 ledger_ok = false;
             Json required = Json::array();
@@ -382,6 +447,7 @@ Json verify(const fs::path &dir) {
                 auto stage = d.at("stage").get<std::string>();
                 if (stage != "retail" && stage != "wholesale")
                     semantics_ok = false;
+                sold[seller] = add(sold[seller], q);
                 inc(sales, stage, amount);
                 inc(units[stage], p, q);
                 realized.push_back({{"stage", stage}, {"product", p}, {"price", price}, {"quantity", q}});
@@ -395,31 +461,58 @@ Json verify(const fs::path &dir) {
             } else if (type == "wage") {
                 auto amount = integer(d.at("amount"));
                 auto employer = d.at("employer").get<std::string>(), h = d.at("household").get<std::string>();
-                auto &f = firm(reconstructed, employer);
+                firm(reconstructed, employer);
                 bool employed = false;
                 for (auto &household : reconstructed.households)
                     if (household.id == h && household.employer == employer)
                         employed = true;
-                if (!employed || amount != f.wage || !paid_households.insert(h).second)
+                // The wage paid is the one agreed for the open spell, not necessarily the firm's base wage.
+                if (phase != "work" || !employed || open_wage(h) != amount ||
+                    !paid_households.insert(h).second || integer(d.at("labor_units")) != 1)
                     semantics_ok = false;
-                required = {effect(employer, "cash", -amount), effect(h, "cash", amount)};
+                // Payroll buys one worker-day of labor, which only production may consume.
+                required = {effect(employer, "cash", -amount), effect(h, "cash", amount),
+                            effect(employer, "labor", 1)};
                 wages = add(wages, amount);
+                paid_amount[h] = amount;
                 ++paid;
+                inc(labor_units, "delivered", 1);
+                inc(labor_flow[employer], "delivered", 1);
             } else if (type == "production") {
                 auto q = integer(d.at("quantity"));
                 auto id = d.at("firm").get<std::string>(), p = d.at("product").get<std::string>();
                 auto &f = firm(reconstructed, id);
-                Amount labor = 0;
+                Amount paid_labor = 0;
                 for (auto &h : reconstructed.households)
                     if (h.employer == id && paid_households.contains(h.id))
-                        ++labor;
-                if (q <= 0 || q > f.capacity || p != f.output || d.at("inputs_per_unit") != Json(f.inputs) ||
-                    labor < f.labor_required || !producing_firms.insert(id).second)
+                        ++paid_labor;
+                auto used = integer(d.at("labor_used"));
+                if (phase != "work" || f.kind != "producer" || q <= 0 || q > f.capacity ||
+                    q > mul_capped(f.output_per_worker, paid_labor, f.capacity) || p != f.output ||
+                    d.at("inputs_per_unit") != Json(f.inputs) || paid_labor < f.labor_required ||
+                    !producing_firms.insert(id).second || used != ceil_div(q, f.output_per_worker) ||
+                    integer(d.at("paid_workers")) != paid_labor || used > account(reconstructed, id).labor ||
+                    integer(d.at("labor_idle")) != integer(d.at("paid_workers")) - used)
                     semantics_ok = false;
                 for (auto &[input, n] : f.inputs)
                     required.push_back(effect(id, "stock", -mul(q, n), input));
                 required.push_back(effect(id, "stock", q, p));
+                required.push_back(effect(id, "labor", -used));
                 inc(production, p, q);
+                inc(labor_units, "used", used);
+                inc(labor_flow[id], "used", used);
+            } else if (type == "labor_released") {
+                // Whatever payroll bought and production did not use is released the same day.
+                auto id = d.at("firm").get<std::string>();
+                auto released = integer(d.at("units"));
+                auto use = d.at("use").get<std::string>();
+                auto &f = firm(reconstructed, id);
+                if (released <= 0 || released != account(reconstructed, id).labor || phase != "work" ||
+                    use != (f.kind == "producer" ? "idle" : "retail_service"))
+                    semantics_ok = false;
+                required = {effect(id, "labor", -released)};
+                inc(labor_units, use, released);
+                inc(labor_flow[id], use, released);
             } else if (type == "consumption") {
                 auto q = integer(d.at("quantity"));
                 if (q <= 0)
@@ -439,8 +532,23 @@ Json verify(const fs::path &dir) {
                 unmet_by[key] = add(unmet_by[key], q);
             } else if (type == "trade_rejected") {
                 ++failed;
-                if (d.at("reason") == "OUT_OF_STOCK")
+                if (d.at("reason") == "OUT_OF_STOCK") {
                     ++stockouts;
+                    auto seller = d.at("seller").get<std::string>();
+                    shortfall[seller] = add(shortfall[seller], integer(d.at("quantity")));
+                }
+            } else if (type == "procurement_blocked") {
+                if (d.at("reason") == "OUT_OF_STOCK") {
+                    auto supplier = d.at("supplier").get<std::string>();
+                    shortfall[supplier] = add(shortfall[supplier], integer(d.at("desired")));
+                }
+            } else if (type == "supply_shortfall") {
+                auto supplier = d.at("supplier").get<std::string>();
+                auto lacking = integer(d.at("shortfall"));
+                if (lacking <= 0 || lacking != integer(d.at("desired")) - integer(d.at("supplied")) ||
+                    d.at("reason") != "OUT_OF_STOCK")
+                    semantics_ok = false;
+                shortfall[supplier] = add(shortfall[supplier], lacking);
             } else if (type == "price_changed") {
                 auto &f = firm(reconstructed, d.at("firm"));
                 auto p = d.at("product").get<std::string>();
@@ -451,7 +559,190 @@ Json verify(const fs::path &dir) {
                 if (d.at("type") != "public_price_board" || reconstructed.public_board)
                     semantics_ok = false;
                 reconstructed.public_board = true;
-            } else if (type != "procurement_blocked" && type != "work_inactive")
+            } else if (type == "work_inactive") {
+                inactive[d.at("firm").get<std::string>()] = d.at("reason");
+            } else if (type == "posting_opened") {
+                auto p = d.at("posting").get<Posting>();
+                bool duplicate = false;
+                for (auto &other : reconstructed.board)
+                    if (other.firm == p.firm)
+                        duplicate = true;
+                auto &f = firm(reconstructed, p.firm);
+                if (!dynamic || phase != "employment" ||
+                    p.id != "posting:" + std::to_string(posting_sequence++) || duplicate || p.openings <= 0 ||
+                    p.posted != day || p.unfilled_days != 0 || p.applications != 0 ||
+                    p.wage < f.hiring.wage_min || p.wage > f.hiring.wage_max ||
+                    p.min_experience_days != f.hiring.min_experience_days ||
+                    p.accept_employed != f.hiring.accept_employed ||
+                    p.rehire_cooldown_days != f.hiring.rehire_cooldown_days || d.at("firm") != p.firm ||
+                    d.at("reason") != p.reason)
+                    semantics_ok = false;
+                reconstructed.board.push_back(p);
+                board_activity.push_back({{"event", e.at("id")},
+                                          {"type", type},
+                                          {"firm", p.firm},
+                                          {"posting", p.id},
+                                          {"reason", p.reason}});
+            } else if (type == "posting_adjusted") {
+                auto *p = posting_of(d.at("posting").get<std::string>());
+                auto field = d.at("field").get<std::string>();
+                auto value = integer(d.at("new"));
+                if (!dynamic || phase != "employment" || !p || d.at("firm") != p->firm ||
+                    (field != "wage" && field != "openings") || value < 0 ||
+                    (field == "openings" && value == 0))
+                    semantics_ok = false;
+                else {
+                    auto &f = firm(reconstructed, p->firm);
+                    if (integer(d.at("old")) != (field == "wage" ? p->wage : p->openings) ||
+                        (field == "wage" && (value < f.hiring.wage_min || value > f.hiring.wage_max)))
+                        semantics_ok = false;
+                    (field == "wage" ? p->wage : p->openings) = value;
+                    if (field == "wage")
+                        p->unfilled_days = 0;
+                    board_activity.push_back({{"event", e.at("id")},
+                                              {"type", type},
+                                              {"firm", p->firm},
+                                              {"posting", p->id},
+                                              {"reason", d.at("reason")}});
+                }
+            } else if (type == "posting_closed") {
+                auto id = d.at("posting").get<std::string>();
+                auto *p = posting_of(id);
+                if (!dynamic || phase != "employment" || !p || d.at("firm") != p->firm ||
+                    (d.at("reason") == "FILLED") != (p->openings == 0))
+                    semantics_ok = false;
+                else {
+                    board_activity.push_back({{"event", e.at("id")},
+                                              {"type", type},
+                                              {"firm", p->firm},
+                                              {"posting", p->id},
+                                              {"reason", d.at("reason")}});
+                    for (std::size_t i = 0; i < reconstructed.board.size(); ++i)
+                        if (reconstructed.board[i].id == id)
+                            reconstructed.board.erase(reconstructed.board.begin() +
+                                                      static_cast<std::ptrdiff_t>(i));
+                }
+            } else if (type == "employment_change_cancelled") {
+                auto c = d.at("change").get<EmploymentChange>();
+                if (!dynamic || phase != "employment" || !pending_changes.contains(c.id) ||
+                    Json(pending_changes.at(c.id)) != Json(c) || !c.to_employer.empty() ||
+                    d.at("household") != c.household || d.at("from_employer") != c.from_employer ||
+                    d.at("to_employer") != c.to_employer)
+                    semantics_ok = false;
+                pending_changes.erase(c.id);
+                labor[c.household]["cancelled"] = {{"id", c.id},
+                                                   {"from_employer", c.from_employer},
+                                                   {"to_employer", c.to_employer},
+                                                   {"reason", d.at("reason")}};
+            } else if (type == "employment_scheduled") {
+                // A scheduled change is a promise for a future day; it changes no job today.
+                auto c = d.at("change").get<EmploymentChange>();
+                auto &h = household_of(c.household);
+                bool already = false;
+                for (auto &[id, other] : pending_changes)
+                    if (other.household == c.household)
+                        already = true;
+                if (!dynamic || phase != "employment" ||
+                    c.id != "change:" + std::to_string(change_sequence++) || already || c.requested != day ||
+                    c.effective <= day || h.employer != c.from_employer || c.from_employer == c.to_employer ||
+                    d.at("household") != c.household || d.at("from_employer") != c.from_employer ||
+                    d.at("to_employer") != c.to_employer || integer(d.at("effective")) != c.effective ||
+                    d.at("reason") != c.reason || integer(d.at("wage")) != c.wage ||
+                    d.at("posting") != c.posting)
+                    semantics_ok = false;
+                if (c.to_employer.empty()) {
+                    if (c.wage != 0 || !c.posting.empty() || c.reason.rfind("LAYOFF_", 0) != 0 ||
+                        c.effective != add(day, integer(scenario.at("employment").at("notice_days"))))
+                        semantics_ok = false;
+                } else {
+                    // A hire answers a live posting at its advertised wage, consumes one opening and
+                    // starts tomorrow.
+                    auto *p = posting_of(c.posting);
+                    auto expected_reason = c.from_employer.empty() ? "HIRED"
+                                           : h.unpaid_days >= h.job_preferences.unpaid_tolerance_days
+                                               ? "QUIT_UNPAID"
+                                               : "SWITCHED";
+                    if (!p || p->firm != c.to_employer || p->openings <= 0 || p->wage != c.wage ||
+                        c.effective != day + 1 || c.reason != expected_reason || p->firm == h.employer ||
+                        (!h.employer.empty() && !p->accept_employed) ||
+                        experience_days(reconstructed, h.id, day) < p->min_experience_days)
+                        semantics_ok = false;
+                    else {
+                        for (const auto &r : reconstructed.employment)
+                            if (r.household == h.id && r.employer == p->firm && r.end != -1 &&
+                                r.end_reason.rfind("LAYOFF_", 0) == 0 &&
+                                day - r.end < p->rehire_cooldown_days)
+                                semantics_ok = false;
+                        --p->openings;
+                        p->unfilled_days = 0;
+                        p->applications = add(p->applications, 1);
+                        applied.insert(p->id);
+                    }
+                    inc(search_from_events, "applied", 1);
+                    inc(search_from_events,
+                        c.reason == "HIRED"         ? "hires"
+                        : c.reason == "QUIT_UNPAID" ? "quits"
+                                                    : "switches",
+                        1);
+                    recorded_applications[day][c.household] = {
+                        {"outcome", c.reason == "HIRED"         ? "HIRE_SCHEDULED"
+                                    : c.reason == "QUIT_UNPAID" ? "QUIT_SCHEDULED"
+                                                                : "SWITCH_SCHEDULED"},
+                        {"chosen", c.posting},
+                        {"event", e.at("id")}};
+                }
+                pending_changes[c.id] = c;
+                labor[c.household]["scheduled"] = {{"id", c.id},
+                                                   {"from_employer", c.from_employer},
+                                                   {"to_employer", c.to_employer},
+                                                   {"effective", c.effective},
+                                                   {"wage", c.wage},
+                                                   {"posting", c.posting},
+                                                   {"reason", c.reason}};
+            } else if (type == "employment_changed") {
+                auto c = d.at("change").get<EmploymentChange>();
+                auto &h = household_of(c.household);
+                if (!dynamic || phase != "employment" || !pending_changes.contains(c.id) ||
+                    Json(pending_changes.at(c.id)) != Json(c) || c.effective != day ||
+                    h.employer != c.from_employer || !changed_today.insert(c.household).second ||
+                    d.at("household") != c.household || d.at("from_employer") != c.from_employer ||
+                    d.at("to_employer") != c.to_employer || d.at("reason") != c.reason)
+                    semantics_ok = false;
+                pending_changes.erase(c.id);
+                Json closed = nullptr;
+                for (auto &r : reconstructed.employment)
+                    if (r.household == c.household && r.end == -1) {
+                        r.end = day;
+                        r.end_reason = c.reason;
+                        closed = r.id;
+                    }
+                h.employer = c.to_employer;
+                h.unpaid_days = 0;
+                Json opened = nullptr;
+                if (!c.to_employer.empty()) {
+                    EmploymentRecord r{"employment:" + std::to_string(employment_sequence++),
+                                       c.household,
+                                       c.to_employer,
+                                       day,
+                                       -1,
+                                       c.wage,
+                                       c.reason,
+                                       ""};
+                    reconstructed.employment.push_back(r);
+                    opened = r.id;
+                }
+                if (d.at("closed_record") != closed || d.at("opened_record") != opened)
+                    semantics_ok = false;
+                if (!c.from_employer.empty())
+                    ++separations;
+                if (!c.to_employer.empty())
+                    ++hires;
+                labor[c.household]["change"] = {{"id", c.id},
+                                                {"from_employer", c.from_employer},
+                                                {"to_employer", c.to_employer},
+                                                {"wage", c.wage},
+                                                {"reason", c.reason}};
+            } else
                 semantics_ok = false;
             if (required != e.at("effects"))
                 semantics_ok = false;
@@ -469,11 +760,13 @@ Json verify(const fs::path &dir) {
                     a.stock[p] = add(stock(a.stock, p), n);
                 else if (field == "reserved_stock")
                     a.reserved_stock[p] = add(stock(a.reserved_stock, p), n);
+                else if (field == "labor")
+                    a.labor = add(a.labor, n);
                 else
                     ledger_ok = false;
             }
             for (auto &a : reconstructed.accounts) {
-                if (a.cash < 0 || a.reserved_cash < 0 || a.reserved_cash > a.cash)
+                if (a.cash < 0 || a.reserved_cash < 0 || a.reserved_cash > a.cash || a.labor < 0)
                     ledger_ok = false;
                 for (auto &[p, q] : a.stock)
                     if (q < 0 || stock(a.reserved_stock, p) < 0 || stock(a.reserved_stock, p) > q)
@@ -484,6 +777,8 @@ Json verify(const fs::path &dir) {
         if (next && integer(next->at("day")) < day)
             ledger_ok = false;
         for (auto &a : reconstructed.accounts) {
+            if (a.labor != 0) // labor never survives the day
+                ledger_ok = false;
             if (metric.at("inventories").at(a.id) != Json(a.stock))
                 metrics_ok = false;
             auto key = a.id.rfind("firm:", 0) == 0 ? "firm_cash" : "household_cash";
@@ -494,9 +789,93 @@ Json verify(const fs::path &dir) {
             for (auto &[p, need] : h.needs)
                 if (add(consumed_by[{h.id, p}], unmet_by[{h.id, p}]) != need)
                     semantics_ok = false;
-        for (auto &h : reconstructed.households)
+        // Postings nobody answered today age by a day; demand observations roll into the window.
+        for (auto &p : reconstructed.board)
+            if (p.openings > 0 && !applied.contains(p.id))
+                p.unfilled_days = add(p.unfilled_days, 1);
+        for (auto &f : reconstructed.firms) {
+            f.demand_history.push_back(add(sold[f.id], shortfall[f.id]));
+            if (f.demand_history.size() > demand_window)
+                f.demand_history.erase(f.demand_history.begin());
+        }
+        // Payroll streaks: a firm with workers that ran no payroll missed one; a paid worker resets.
+        for (auto &f : reconstructed.firms) {
+            Amount workers = 0, paid_workers = 0;
+            for (auto &h : reconstructed.households)
+                if (h.employer == f.id) {
+                    ++workers;
+                    if (paid_households.contains(h.id))
+                        ++paid_workers;
+                }
+            if ((paid_workers != 0 && paid_workers != workers) ||
+                (paid_workers > 0 && workers < f.labor_required) ||
+                (inactive.contains(f.id) && paid_workers != 0) ||
+                (!inactive.contains(f.id) && paid_workers != workers))
+                semantics_ok = false;
+            if (inactive.contains(f.id)) {
+                if (inactive.at(f.id) !=
+                    (workers < f.labor_required ? "INSUFFICIENT_LABOR" : "INSUFFICIENT_PAYROLL"))
+                    semantics_ok = false;
+                if (workers > 0)
+                    f.payroll_missed_days = add(f.payroll_missed_days, 1);
+                else
+                    f.payroll_missed_days = 0;
+            } else
+                f.payroll_missed_days = 0;
+        }
+        Amount employed = 0;
+        for (auto &h : reconstructed.households) {
             if (metric.at("employment").at(h.id) != h.employer)
                 metrics_ok = false;
+            if (!h.employer.empty()) {
+                ++employed;
+                h.unpaid_days = paid_households.contains(h.id) ? 0 : add(h.unpaid_days, 1);
+            }
+            // Per-person documentation must match the day's ledger: job held, work, pay, changes.
+            auto &person = labor[h.id];
+            person["employer"] = h.employer.empty() ? Json(nullptr) : Json(h.employer);
+            person["status"] = h.employer.empty() ? "unemployed" : "employed";
+            person["worked"] = paid_households.contains(h.id);
+            person["wage_paid"] = paid_households.contains(h.id) ? paid_amount.at(h.id) : 0;
+            person["idle_reason"] = !h.employer.empty() && !paid_households.contains(h.id)
+                                        ? inactive.value(h.employer, Json(nullptr))
+                                        : Json(nullptr);
+            person["unpaid_days"] = h.unpaid_days;
+            for (auto key : {"change", "scheduled", "cancelled"})
+                if (!person.contains(key))
+                    person[key] = nullptr;
+            if (paid_households.contains(h.id) && h.employer.empty())
+                labor_ok = false;
+        }
+        Json demand = Json::object();
+        for (auto &f : reconstructed.firms)
+            demand[f.id] = f.demand_history.back();
+        // Per-person search outcomes come from decisions; set them aside for the decision scan.
+        Json recorded_labor = metric.at("labor"), person_search = Json::object();
+        for (auto it = recorded_labor.begin(); it != recorded_labor.end(); ++it)
+            if (it.value().is_object()) {
+                person_search[it.key()] = it.value().value("search", Json(nullptr));
+                it.value().erase("search");
+            }
+        recorded_person_search[day] = person_search;
+        recorded_search[day] = metric.value("job_search", Json(nullptr));
+        if (!recorded_search[day].is_object())
+            labor_ok = false;
+        else
+            for (auto key : {"applied", "hires", "switches", "quits"})
+                if (recorded_search[day].value(key, Json(nullptr)) != search_from_events.at(key))
+                    labor_ok = false;
+        if (recorded_labor != labor || metric.at("inactive_firms") != inactive ||
+            metric.at("board") != Json(reconstructed.board) ||
+            metric.at("board_activity") != board_activity || metric.at("demand") != demand ||
+            integer(metric.at("hires")) != hires || integer(metric.at("separations")) != separations ||
+            integer(metric.at("employed")) != employed ||
+            integer(metric.at("unemployed")) !=
+                static_cast<Amount>(reconstructed.households.size()) - employed ||
+            integer(metric.at("pending_changes")) != static_cast<Amount>(pending_changes.size()))
+            labor_ok = false;
+        if (metric.at("labor_units") != labor_units || metric.at("labor_flow") != labor_flow)
+            labor_ok = false;
         if (metric.at("production") != production || metric.at("consumption") != consumption ||
             metric.at("unmet") != unmet || metric.at("firm_net_cash_flow") != flow ||
             metric.at("sales_cents") != sales || metric.at("sales_units") != units ||
@@ -515,8 +894,35 @@ Json verify(const fs::path &dir) {
     check("ordered_complete_economic_ledger", ledger_ok);
     check("event_operation_semantics", semantics_ok);
     check("per_day_metrics_reconcile", metrics_ok);
+    check("per_person_labor_records_reconcile", labor_ok);
     check("closing_accounts_reconcile", Json(reconstructed.accounts) == Json(final_state.accounts));
     check("closing_prices_reconcile", Json(reconstructed.firms) == Json(final_state.firms));
+    {
+        // Jobs, spells and promises at the close must be exactly what the ledger implies.
+        bool employment_ok = initial_state.employment_mode == final_state.employment_mode &&
+                             change_sequence == final_state.next_change &&
+                             employment_sequence == final_state.next_employment &&
+                             posting_sequence == final_state.next_posting &&
+                             Json(reconstructed.employment) == Json(final_state.employment) &&
+                             Json(reconstructed.board) == Json(final_state.board);
+        std::vector<EmploymentChange> expected_changes, actual_changes = final_state.pending_changes;
+        for (auto &[id, c] : pending_changes) {
+            (void)id;
+            expected_changes.push_back(c);
+        }
+        auto by_id = [](const EmploymentChange &a, const EmploymentChange &b) { return a.id < b.id; };
+        std::sort(expected_changes.begin(), expected_changes.end(), by_id);
+        std::sort(actual_changes.begin(), actual_changes.end(), by_id);
+        if (Json(expected_changes) != Json(actual_changes) ||
+            reconstructed.households.size() != final_state.households.size())
+            employment_ok = false;
+        for (std::size_t i = 0; employment_ok && i < reconstructed.households.size(); ++i)
+            if (reconstructed.households[i].id != final_state.households[i].id ||
+                reconstructed.households[i].employer != final_state.households[i].employer ||
+                reconstructed.households[i].unpaid_days != final_state.households[i].unpaid_days)
+                employment_ok = false;
+        check("employment_records_and_pending_changes_reconcile", employment_ok);
+    }
     std::vector<Order> expected_orders;
     for (auto &[id, o] : pending) {
         (void)id;
@@ -542,8 +948,66 @@ Json verify(const fs::path &dir) {
     };
     next_link();
     Day decision_day = initial_state.next_day;
+    std::map<Day, Json> search_from_decisions, person_search_from_decisions;
     scan_lines(dir / "decisions.jsonl", [&](const Json &d) {
         auto day = integer(d.at("day"));
+        if (d.at("policy") == "job_search-2") {
+            auto &day_totals = search_from_decisions[day];
+            if (day_totals.is_null())
+                day_totals = {{"searching", 0},
+                              {"declined", 0},
+                              {"ineligible", 0},
+                              {"no_postings", 0},
+                              {"applied", 0},
+                              {"hires", 0},
+                              {"switches", 0},
+                              {"quits", 0},
+                              {"declined_reasons", Json::object()},
+                              {"ineligible_reasons", Json::object()}};
+            inc(day_totals, "searching", 1);
+            auto outcome = d.at("outcome").get<std::string>();
+            auto actor = d.at("actor").get<std::string>();
+            if (!dynamic || actor.rfind("household:", 0) != 0 ||
+                (person_search_from_decisions[day].is_object() &&
+                 person_search_from_decisions[day].contains(actor)))
+                decisions_ok = false;
+            if (outcome == "DECLINED")
+                inc(day_totals, "declined", 1);
+            else if (outcome == "INELIGIBLE")
+                inc(day_totals, "ineligible", 1);
+            else if (outcome == "NO_POSTINGS")
+                inc(day_totals, "no_postings", 1);
+            else if (outcome == "HIRE_SCHEDULED" || outcome == "SWITCH_SCHEDULED" ||
+                     outcome == "QUIT_SCHEDULED") {
+                inc(day_totals, "applied", 1);
+                inc(day_totals,
+                    outcome == "HIRE_SCHEDULED"     ? "hires"
+                    : outcome == "SWITCH_SCHEDULED" ? "switches"
+                                                    : "quits",
+                    1);
+                const auto &applications = recorded_applications[day];
+                if (!applications.is_object() || !applications.contains(actor) ||
+                    applications.at(actor).at("outcome") != outcome ||
+                    applications.at(actor).at("chosen") != d.at("chosen") ||
+                    d.at("event_ids") != Json::array({applications.at(actor).at("event")}))
+                    decisions_ok = false;
+            } else
+                decisions_ok = false;
+            Amount declined = 0, ineligible = 0;
+            if (d.contains("exclusions"))
+                for (auto &x : d.at("exclusions")) {
+                    bool preference = x.at("stage") == "preference";
+                    inc(day_totals[preference ? "declined_reasons" : "ineligible_reasons"], x.at("reason"),
+                        1);
+                    (preference ? declined : ineligible) += 1;
+                }
+            Json person = {{"outcome", outcome}, {"reason", d.at("reason")}, {"chosen", d.at("chosen")}};
+            if (d.contains("exclusions")) {
+                person["declined"] = declined;
+                person["ineligible"] = ineligible;
+            }
+            person_search_from_decisions[day][d.at("actor").get<std::string>()] = person;
+        }
         if (d.at("schema") != "decision-1" ||
             d.at("id") != "decision:" + std::to_string(decision_sequence++) || day < decision_day ||
             day >= final_state.next_day)
@@ -573,14 +1037,22 @@ Json verify(const fs::path &dir) {
             if (!linked || linked->at("id") != target || linked->at("day") != day)
                 decisions_ok = false;
             else if (d.at("kind") == "household") {
-                if ((linked->at("type") != "trade" && linked->at("type") != "trade_rejected") ||
-                    linked->at("data").at("buyer") != d.at("actor") ||
-                    linked->at("data").at("product") != d.at("product"))
+                auto type = linked->at("type").get<std::string>();
+                if (type == "employment_scheduled") {
+                    if (linked->at("data").at("household") != d.at("actor") ||
+                        d.at("policy") != "job_search-2")
+                        decisions_ok = false;
+                } else if ((type != "trade" && type != "trade_rejected") ||
+                           linked->at("data").at("buyer") != d.at("actor") ||
+                           linked->at("data").at("product") != d.at("product"))
                     decisions_ok = false;
             } else {
                 auto &data = linked->at("data");
                 auto type = linked->at("type").get<std::string>();
-                if (type == "order_reserved") {
+                if (type == "employment_scheduled" || type == "employment_change_cancelled") {
+                    if (data.at("from_employer") != d.at("actor") || d.at("policy") != "staffing_plan-1")
+                        decisions_ok = false;
+                } else if (type == "order_reserved") {
                     if (data.at("order").at("buyer") != d.at("actor") ||
                         std::find(d.at("order_ids").begin(), d.at("order_ids").end(),
                                   data.at("order").at("id")) == d.at("order_ids").end())
@@ -603,6 +1075,52 @@ Json verify(const fs::path &dir) {
     if (decision_sequence != final_state.next_decision)
         decisions_ok = false;
     check("decision_sequence_and_event_links", decisions_ok);
+    // Search totals and each person's search record must agree with the recorded decisions. Summary
+    // traces omit exclusions, so reason breakdowns are only checked when the evidence is present.
+    bool search_ok = true;
+    for (auto &[day, recorded] : recorded_search) {
+        if (!recorded.is_object()) {
+            search_ok = false;
+            continue;
+        }
+        auto expected = search_from_decisions.contains(day) ? search_from_decisions.at(day)
+                                                            : Json{{"searching", 0},
+                                                                   {"declined", 0},
+                                                                   {"ineligible", 0},
+                                                                   {"no_postings", 0},
+                                                                   {"applied", 0},
+                                                                   {"hires", 0},
+                                                                   {"switches", 0},
+                                                                   {"quits", 0},
+                                                                   {"declined_reasons", Json::object()},
+                                                                   {"ineligible_reasons", Json::object()}};
+        for (auto key :
+             {"searching", "declined", "ineligible", "no_postings", "applied", "hires", "switches", "quits"})
+            if (recorded.value(key, Json(nullptr)) != expected.at(key))
+                search_ok = false;
+        if (manifest.at("trace") == "audit")
+            for (auto key : {"declined_reasons", "ineligible_reasons"})
+                if (recorded.value(key, Json(nullptr)) != expected.at(key))
+                    search_ok = false;
+        auto &persons = recorded_person_search[day];
+        auto &decided = person_search_from_decisions[day];
+        for (auto it = persons.begin(); it != persons.end(); ++it) {
+            auto expected_person =
+                decided.is_object() ? decided.value(it.key(), Json(nullptr)) : Json(nullptr);
+            if (it.value().is_null() != expected_person.is_null())
+                search_ok = false;
+            else if (!it.value().is_null()) {
+                for (auto key : {"outcome", "reason", "chosen"})
+                    if (it.value().value(key, Json(nullptr)) != expected_person.at(key))
+                        search_ok = false;
+                if (manifest.at("trace") == "audit")
+                    for (auto key : {"declined", "ineligible"})
+                        if (it.value().value(key, Json(nullptr)) != expected_person.at(key))
+                            search_ok = false;
+            }
+        }
+    }
+    check("job_search_metrics_reconcile", search_ok);
     bool replay_ok = true;
     Day replay_day = initial_state.next_day + 1;
     Json last_display;
@@ -659,13 +1177,25 @@ Json verify(const fs::path &dir) {
 Json inspect(const fs::path &dir, const std::string &id) {
     auto j = read_json(dir / "final_state.json");
     auto s = j.at("state").get<State>();
-    Json result = {{"schema", "inspection-1"}, {"boundary", s.next_day}, {"account", account(s, id)}};
+    Json result = {
+        {"schema", "inspection-1"},  {"boundary", s.next_day},      {"employment_mode", s.employment_mode},
+        {"account", account(s, id)}, {"employment", Json::array()}, {"pending_changes", Json::array()}};
     for (auto &h : s.households)
         if (h.id == id)
             result["household"] = h;
     for (auto &f : s.firms)
         if (f.id == id)
             result["firm"] = f;
+    for (auto &r : s.employment)
+        if (r.household == id || r.employer == id)
+            result["employment"].push_back(r);
+    for (auto &c : s.pending_changes)
+        if (c.household == id || c.from_employer == id || c.to_employer == id)
+            result["pending_changes"].push_back(c);
+    result["board"] = Json::array();
+    for (auto &p : s.board)
+        if (p.firm == id)
+            result["board"].push_back(p);
     return result;
 }
 Json explain(const fs::path &dir, const std::string &id) {
@@ -714,6 +1244,7 @@ Json compare(const fs::path &base, const fs::path &variant, Day from, Day until)
     // Prove shared state at the branch boundary from parent metadata, or same initial state.
     auto initial_a = read_json(base / "initial_state.json"),
          initial_b = read_json(variant / "initial_state.json");
+    const bool different_modes = a.at("employment") != b.at("employment");
     auto state_at = [&](const fs::path &dir, const Json &initial_record, Day day) -> std::string {
         auto state = initial_record.at("state").get<State>();
         if (state.next_day == day)
@@ -725,7 +1256,19 @@ Json compare(const fs::path &base, const fs::path &variant, Day from, Day until)
             throw Error(4, "comparison needs checkpoint at continuation origin");
         return load_checkpoint(cp).checkpoint_digest;
     };
-    if (initial_a.at("state").at("next_day") == initial_b.at("state").at("next_day")) {
+    if (different_modes) {
+        // Mode experiments share the entire scenario and day-zero endowment. Removing only the
+        // treatment flag proves that no other initial condition changed. Continuations of different
+        // modes have already diverged, so cannot establish this pairing on their own.
+        auto state_a = initial_a.at("state"), state_b = initial_b.at("state");
+        if (state_a.at("next_day") != 0 || state_b.at("next_day") != 0 || !a.at("parent").is_null() ||
+            !b.at("parent").is_null() || !a.at("intervention").is_null() || !b.at("intervention").is_null())
+            throw Error(4, "employment comparison requires unmodified runs from day zero");
+        state_a.erase("employment_mode");
+        state_b.erase("employment_mode");
+        if (state_a != state_b)
+            throw Error(4, "different initial conditions for employment comparison");
+    } else if (initial_a.at("state").at("next_day") == initial_b.at("state").at("next_day")) {
         if (initial_a.at("digest") != initial_b.at("digest"))
             throw Error(4, "different initial state");
     } else {
@@ -746,14 +1289,28 @@ Json compare(const fs::path &base, const fs::path &variant, Day from, Day until)
                        {"unmet", Json::object()},
                        {"sales_cents", {{"retail", 0}, {"wholesale", 0}}},
                        {"wages", 0},
+                       {"paid_workers", 0},
+                       {"employed_person_days", 0},
+                       {"unemployed_person_days", 0},
+                       {"hires", 0},
+                       {"separations", 0},
+                       {"job_search", Json::object()},
+                       {"labor_units", Json::object()},
                        {"periods", 0}};
         scan_lines(dir / "metrics.jsonl", [&](const Json &m) {
             auto day = integer(m.at("day"));
             if (day >= from && day < until) {
-                for (auto key : {"production", "consumption", "unmet", "sales_cents"})
+                for (auto key : {"production", "consumption", "unmet", "sales_cents", "labor_units"})
                     for (auto it = m.at(key).begin(); it != m.at(key).end(); ++it)
                         inc(result[key], it.key(), integer(it.value()));
                 inc(result, "wages", integer(m.at("wages")));
+                for (auto key : {"paid_workers", "hires", "separations"})
+                    inc(result, key, integer(m.at(key)));
+                inc(result, "employed_person_days", integer(m.at("employed")));
+                inc(result, "unemployed_person_days", integer(m.at("unemployed")));
+                for (auto key : {"searching", "applied", "hires", "switches", "quits", "declined",
+                                 "ineligible", "no_postings"})
+                    inc(result["job_search"], key, integer(m.at("job_search").at(key)));
                 inc(result, "periods", 1);
             }
         });
@@ -761,7 +1318,13 @@ Json compare(const fs::path &base, const fs::path &variant, Day from, Day until)
             throw Error(4, "missing comparison periods");
         return result;
     };
-    return {{"schema", "comparison-1"}, {"model", model_version}, {"from_day", from},
-            {"until_day", until},       {"baseline", sum(base)},  {"variant", sum(variant)}};
+    return {{"schema", "comparison-1"},
+            {"model", model_version},
+            {"from_day", from},
+            {"employment", {{"baseline", a.at("employment")}, {"variant", b.at("employment")}}},
+            {"comparison_kind", different_modes ? "employment_modes" : "shared_state"},
+            {"until_day", until},
+            {"baseline", sum(base)},
+            {"variant", sum(variant)}};
 }
 } // namespace econ

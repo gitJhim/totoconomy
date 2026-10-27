@@ -1,6 +1,6 @@
 # Totoconomy
 
-A C++20, CLI-only miniature economy whose decisions and transactions can be inspected. Stage 1 includes a closed accounting fixture, a synthetic 24-household town, limited price knowledge, delayed procurement, checkpoints and paired information experiments. An interactive terminal inspector is available; there is no graphical or video renderer yet.
+A C++20, CLI-only miniature economy whose decisions and transactions can be inspected. Stage 1 includes a closed accounting fixture, a synthetic 24-household town, limited price knowledge, delayed procurement, checkpoints, paired information experiments, and optional dynamic employment with job advertisements, applications, employer switching, wage offers and layoffs. An interactive terminal inspector is available; there is no graphical or video renderer yet.
 
 Requires Linux, a C++20 GCC/Clang toolchain, CMake 3.20+, and a build tool. Tested with GCC 16.2.1 and CMake 4.4.4 on x86-64 Linux. JSON 3.11.3 is vendored with its MIT license. Builds, tests, and runs require no network, services, keys, graphics, or Python.
 
@@ -17,9 +17,9 @@ For the usual starting and testing procedures, use the Bash helper:
 ./scripts/dev.sh --help
 ```
 
-`start` runs the accounting fixture, the 60-day town, inspection/explanation, day-30 resume and both branches, verification, and paired comparisons. It creates a unique `runs/start-*` directory and prints its location; JSON command reports live in its `reports/` subdirectory. To choose the destination, use `./scripts/dev.sh start runs/my-experiment`; the directory must not already exist. The helper works from any working directory, with explicit relative output paths interpreted from that directory. Set `ECON_JOBS=4` to change the default two build jobs. Bash and standard Linux coreutils are required for the helper.
+`start` runs the accounting fixture, the 60-day town, inspection/explanation, day-30 resume and both branches, fixed/dynamic labor-market runs, verification, and paired comparisons. It creates a unique `runs/start-*` directory and prints its location; JSON command reports live in its `reports/` subdirectory. To choose the destination, use `./scripts/dev.sh start runs/my-experiment`; the directory must not already exist. The helper works from any working directory, with explicit relative output paths interpreted from that directory. Set `ECON_JOBS=4` to change the default two build jobs. Bash and standard Linux coreutils are required for the helper.
 
-The inspector provides run selection, overview, entity balances/inventories, recorded decisions and events, day-boundary navigation, filters and exact-ID lookup. Use `1`–`5` or Tab to switch views, `[`/`]` to change day, Enter for full evidence, `?` for help, and `q` to quit. It requires an interactive terminal (60×18 minimum) and changes no run files. See [TUI controls and data limits](docs/TUI.md).
+The inspector provides run selection and creation, overview, entity balances/inventories, recorded decisions and events, Labor and Ledger views, day-boundary navigation, filters and exact-ID lookup. Press `n` in the run list to launch a new simulation and toggle Employment between fixed and dynamic. Use `1`–`7` or Tab to switch views, `[`/`]` to change day, Enter for full evidence, `?` for help, and `q` to quit. It requires an interactive terminal (60×18 minimum) and preserves existing run files. See [TUI controls and data limits](docs/TUI.md).
 
 Equivalent individual commands:
 
@@ -45,6 +45,16 @@ ctest --test-dir build/release --output-on-failure
 ./build/release/econ verify --run runs/baseline --json
 ./build/release/econ benchmark --scenario scenarios/demo_town.json --seed 42 --until-day 365 --trace summary --out runs/benchmark --json
 ```
+
+Employment defaults to `fixed`. To exercise and compare the labor market:
+
+```sh
+./build/release/econ run --scenario scenarios/labor_market.json --seed 7 --until-day 40 --employment fixed --out runs/labor-fixed
+./build/release/econ run --scenario scenarios/labor_market.json --seed 7 --until-day 40 --employment dynamic --out runs/labor-dynamic
+./build/release/econ compare --baseline runs/labor-fixed --variant runs/labor-dynamic --from-day 0 --until-day 40 --json
+```
+
+Resume and branch inherit their checkpoint's employment mode. See [employment rules, configuration and integration review](docs/employment.md). Persisted model `econ-2` requires new runs; retain an earlier executable to inspect or resume existing `econ-1` artifacts.
 
 Run outputs must be new directories. To explicitly replace one run, add `--overwrite`; parent run directories and their descendants are protected during continuation. Tests use isolated output locations. `decision:1` and `household:7` are real demo records; the executable CLI acceptance test also reads a decision ID from the actual output.
 

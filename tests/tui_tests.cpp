@@ -46,6 +46,11 @@ static void type(Inspector &app, const std::string &value) {
         app.key(std::string(1, c));
     app.key("ENTER");
 }
+static void retype(Inspector &app, const std::string &value) {
+    for (int n = 0; n < 200; ++n)
+        app.key("BACKSPACE");
+    type(app, value);
+}
 static void has(const Frame &frame, const std::string &needle) {
     REQUIRE(frame.plain().find(needle) != std::string::npos);
 }
@@ -224,6 +229,12 @@ int main(int argc, char **argv) {
         opt.out = root / "empty";
         opt.until = 0;
         run(config, 42, opt);
+        auto labor_config = read_json(fs::path(ECON_SOURCE) / "scenarios/labor_market.json");
+        RunOptions dynamic_opt;
+        dynamic_opt.out = root / "dynamic";
+        dynamic_opt.until = 15;
+        dynamic_opt.employment = "dynamic";
+        run(labor_config, 7, dynamic_opt);
         auto long_manifest = read_json(root / "empty/manifest.json");
         long_manifest["zz_tui_test_note"] = std::string(2000, 'X') + "END_OF_WRAPPED_NOTE";
         write_json(root / "empty/manifest.json", long_manifest);
@@ -241,7 +252,9 @@ int main(int argc, char **argv) {
         REQUIRE(!data.find_record("decision:9999999"));
         fails([&] { data.snapshot(7); });
         auto runs = discover(root);
-        REQUIRE(runs.size() == 4);
+        REQUIRE(runs.size() == 5);
+        for (auto &r : runs)
+            REQUIRE(r.employment == (r.path == root / "dynamic" ? "dynamic" : "fixed"));
         REQUIRE(discover(root / "missing").empty());
         Inspector browser(root);
         has(browser.render(120, 36), "Recorded runs");
@@ -336,8 +349,29 @@ int main(int argc, char **argv) {
             terminal.send("\r", "whole recorded run");
             terminal.send("\x1b", "records");
             terminal.send("2", "Overview");
+            terminal.send("6", "Labor");
+            terminal.send("\x1b[C", "Boundary 2 / 6");
             terminal.resize(80, 24);
-            terminal.until("Boundary 1 / 6");
+            terminal.until("Boundary 2 / 6");
+            terminal.finish();
+        }
+        {
+            Pty terminal(argv[1], root / "dynamic", 120, 36);
+            terminal.until("Employment mode: dynamic");
+            terminal.send("6", "paid 1,000 c");
+            terminal.send("g", "Boundary:");
+            terminal.send("3\r", "Boundary 3 / 15");
+            terminal.send("/", "Filter:");
+            terminal.send("posting:1\r", "Filter: posting:1");
+            terminal.send("j", "vacancy board entry");
+            terminal.send("o", "Recorded runs");
+            terminal.send("n", "NEW RUN");
+            terminal.send("jjj ", "fixed  [dynamic]");
+            terminal.send("\x1b", "form closed");
+            terminal.send("2", "Employment mode: dynamic");
+            terminal.send("7", "Ledger: town > entities");
+            terminal.send("\r", "> transactions");
+            terminal.send("\x1b", "Ledger: town > entities");
             terminal.finish();
         }
         {
@@ -349,6 +383,211 @@ int main(int argc, char **argv) {
             Pty failed_open(argv[1], root / "missing-run", 80, 24);
             failed_open.finish(false, 3, false);
         }
+        // Labor view: per-person records of job, work, pay and changes for the selected day.
+        Inspector labor(root, root / "dynamic");
+        has(labor.render(120, 36), "Employment mode: dynamic");
+        labor.key("g");
+        type(labor, "4"); // day 3: three hires and a quit, one offer declined on reservation wage
+        auto overview = labor.render(120, 36);
+        has(overview, "Job search: 12 searched | 4 applied (3 hires, 0 switches, 1 quits) | 1 declined");
+        has(overview, "acceptance 80%");
+        has(overview, "Declined offers by reason: BELOW_RESERVATION_WAGE=1");
+        labor.key("6");
+        for (int n = 0; n < 3; ++n)
+            labor.key("DOWN"); // household:12, who turned down an offer below its reservation wage
+        auto searched = labor.render(120, 36);
+        has(searched, "household:12  (none)  idle  search: declined");
+        has(searched, "Search today: DECLINED (NO_PREFERABLE_OFFER)");
+        labor.key("3");
+        labor.key("/");
+        type(labor, "household:12\"");
+        has(labor.render(120, 36), "Job preferences: reservation 1,050 c | gain >= 10% and");
+        labor.key("ESC");
+        labor.key("6");
+        REQUIRE(labor.view() == View::Labor);
+        has(labor.render(120, 36), "12 records");
+        labor.key("g");
+        type(labor, "3"); // boundary 3 shows day 2: layoffs scheduled, firm:2's posting raised to 1,100
+        auto day2 = labor.render(120, 36);
+        has(day2, "household:1  firm:1  paid 1,000 c  scheduled ->(none");
+        has(day2, "Scheduled today: firm:1 -> (none) effective day 3 (LAYO");
+        has(day2, "Pending at boundary: firm:1 -> (none) on day 3");
+        has(day2, "posting:1  firm:2  3 open at 1,100 c  unfilled 0 d"); // one seat taken by a switcher
+        labor.key("/");
+        type(labor, "posting:1");
+        labor.key("DOWN"); // the switcher who answered posting:1 matches too; the posting row is second
+        auto posting = labor.render(120, 36);
+        has(posting, "Filter: posting:1  2 records");
+        has(posting, "vacancy board entry of firm:2");
+        has(posting, "applications so far 1");
+        has(posting, "Requires: experience >= 2 days");
+        has(posting, "Posted because: HIRE_INSUFFICIENT_HISTORY");
+        labor.key("e");
+        REQUIRE(labor.view() == View::Events);
+        auto adjusted = labor.render(120, 36);
+        has(adjusted, "posting_adjusted  firm:2  posting:1  wage");
+        has(adjusted, "Offer: 1000 -> 1100");
+        has(adjusted, "Reason: UNFILLED");
+        labor.key("ESC");
+        labor.key("6");
+        labor.key("g");
+        type(labor, "4"); // day 3: the laid-off workers take firm:2's raised offer
+        labor.key("/");
+        type(labor, "HIRED");
+        has(labor.render(120, 36), "3 records");
+        has(labor.render(120, 36), "at 1,100 c via posting:1");
+        labor.key("ENTER");
+        auto record = labor.render(120, 36);
+        has(record, "Labor record (job, work, payroll, changes)");
+        has(record, "\"scheduled\"");
+        labor.key("ESC");
+        labor.key("ESC");
+        labor.key("d");
+        REQUIRE(labor.view() == View::Decisions);
+        has(labor.render(120, 36), "job_search-2");
+        labor.key("6");
+        labor.key("0");
+        has(labor.render(120, 36), "opening state");
+        labor.key("3");
+        labor.key("/");
+        type(labor, "household:1\"");
+        auto entity = labor.render(120, 36);
+        has(entity, "unpaid streak");
+        labor.key("ESC");
+        labor.key("/");
+        type(labor, "firm:2");
+        auto firm_entity = labor.render(120, 36);
+        has(firm_entity, "Positions: 6 | labor required 3 | output/worker 2");
+        has(firm_entity, "Observed demand (units/day");
+        has(firm_entity, "Offers: 900..1300 step 100");
+        labor.key("5");
+        labor.key("g");
+        type(labor, "4");
+        labor.key("/");
+        type(labor, "employment_changed");
+        auto employment_event = labor.render(120, 36);
+        has(employment_event, "In force from this day's employment phase");
+        labor.key("ESC");
+        labor.key("TAB");
+        REQUIRE(labor.view() == View::Labor);
+        labor.key("TAB");
+        REQUIRE(labor.view() == View::Ledger);
+        labor.key("TAB");
+        REQUIRE(labor.view() == View::Runs);
+        // Ledger levels: every entity's day, then one entity's transactions with a running balance,
+        // then the full record; Esc climbs back one level at a time.
+        Inspector ledger(root, root / "dynamic");
+        ledger.key("7");
+        REQUIRE(ledger.view() == View::Ledger);
+        ledger.key("g");
+        type(ledger, "4");
+        auto town = ledger.render(130, 36);
+        has(town, "Ledger: town > entities  16 records");
+        has(town, "firm:2  cash 79,000 (-3,100)  wages -3,100  labor 3 used");
+        has(town, "Cash in 2,100 c | out 0 c | net +2,100 c | opening 7,600 c");
+        ledger.key("DOWN");
+        has(ledger.render(130, 36), "Payroll: 3,100 c for 3 worker-days | used in production 3");
+        ledger.key("ENTER");
+        auto transactions = ledger.render(130, 36);
+        has(transactions, "Ledger: town > firm:2 > transactions");
+        has(transactions, "wage  cash -1,000  labor +1  -> 81,100 c");
+        has(transactions, "production  labor -3  food +6  -> 79,000 c");
+        has(transactions, "order_reserved wholesale  reserved food +6");
+        has(transactions, "Esc: back to all entities");
+        ledger.key("END");
+        ledger.key("ENTER");
+        has(ledger.render(130, 36), "Recorded transaction (firm:2)");
+        ledger.key("ESC");
+        has(ledger.render(130, 36), "Ledger: town > firm:2 > transactions");
+        ledger.key("ESC");
+        has(ledger.render(130, 36), "Ledger: town > entities");
+        has(ledger.render(130, 36), "> firm:2  cash"); // the entity we came from stays selected
+        ledger.key("/");
+        type(ledger, "household:5");
+        ledger.key("ENTER");
+        has(ledger.render(130, 36), "Ledger: town > household:5 > transactions");
+        has(ledger.render(130, 36), "wage  cash +1,000  -> ");
+        ledger.key("ESC");
+        ledger.key("ESC");
+        ledger.key("e");
+        REQUIRE(ledger.view() == View::Events);
+        ledger.key("7");
+        ledger.key("0");
+        has(ledger.render(130, 36), "opening state, no day completed");
+        ledger.key("ENTER");
+        has(ledger.render(130, 36), "No day completed at the opening boundary");
+        ledger.key("2");
+        ledger.key("G");
+        auto circuit = ledger.render(130, 36);
+        has(circuit, "worker-days bought with payroll");
+        has(circuit, "Goods: made ");
+        has(circuit, "Cash: wages ");
+        // New-run form: the employment mode is chosen in the inspector and launched through run().
+        Inspector creator(root);
+        REQUIRE(!creator.form_open());
+        creator.key("n");
+        REQUIRE(creator.form_open());
+        auto form = creator.render(120, 36);
+        has(form, "NEW RUN");
+        has(form, "[fixed]  dynamic");
+        for (auto [width, height] : {std::pair{60, 18}, std::pair{80, 24}, std::pair{120, 36}}) {
+            creator.key("HOME");
+            for (auto label : {"Scenario", "Seed", "Days", "Employment", "Trace", "Checkpoint every",
+                               "Run name", "Start run"}) {
+                auto focused = creator.render(width, height);
+                has(focused, std::string("> ") + label);
+                has(focused, "Esc cancel");
+                creator.key("DOWN");
+            }
+        }
+        creator.key("HOME");
+        creator.key("ENTER");
+        retype(creator, (fs::path(ECON_SOURCE) / "scenarios/accounting_cycle.json").string());
+        creator.key("DOWN");
+        creator.key("ENTER");
+        retype(creator, "3");
+        creator.key("DOWN");
+        creator.key("ENTER");
+        retype(creator, "4");
+        creator.key("DOWN");
+        creator.key(" ");
+        REQUIRE(creator.form().employment == "dynamic");
+        has(creator.render(120, 36), "fixed  [dynamic]");
+        REQUIRE(creator.form().name == "accounting_cycle-dynamic-seed3-4d");
+        creator.key("DOWN");
+        creator.key("DOWN");
+        creator.key("ENTER");
+        retype(creator, "0");
+        creator.key("END");
+        REQUIRE(!creator.wait_message("ENTER").empty());
+        REQUIRE(creator.wait_message("ENTER").find("dynamic") != std::string::npos);
+        auto before_launch = tree(root);
+        creator.key("ENTER");
+        REQUIRE(!creator.form_open());
+        REQUIRE(creator.data() != nullptr && creator.view() == View::Overview);
+        has(creator.render(120, 36), "Run complete with dynamic employment");
+        auto created = read_json(root / "accounting_cycle-dynamic-seed3-4d/manifest.json");
+        REQUIRE(created.at("employment") == "dynamic" && created.at("seed") == 3 &&
+                created.at("until_day") == 4);
+        for (auto &[file, hash] : before_launch.items())
+            REQUIRE(tree(root).at(file) == hash); // existing runs untouched
+        creator.key("o");
+        has(creator.render(120, 36), "accounting_cycle-dynamic-seed3-4d");
+        creator.key("n");
+        creator.key("END");
+        creator.key("ENTER"); // same name again: refused before anything is written
+        REQUIRE(creator.form_open());
+        has(creator.render(120, 36), "Output already exists");
+        creator.key("UP");
+        creator.key("ENTER");
+        retype(creator, "bad/name");
+        creator.key("END");
+        creator.key("ENTER");
+        has(creator.render(120, 36), "single directory name");
+        creator.key("ESC");
+        REQUIRE(!creator.form_open());
+        fs::remove_all(root / "accounting_cycle-dynamic-seed3-4d");
+        REQUIRE(before == tree(root));
         // Minimum-size text is recoverable through wrapping and exact page traversal.
         Inspector help_page(root, root / "town"), help_lines(root, root / "town");
         help_page.key("?");
@@ -371,6 +610,7 @@ int main(int argc, char **argv) {
         Inspector narrow(root, root / "town");
         has(narrow.render(60, 18), "q quit");
         has(narrow.render(60, 18), "5Events");
+        has(narrow.render(60, 18), "7Ledger");
         narrow.key("/");
         REQUIRE(!narrow.key("CTRL_C"));
         // The optional saved report must not prevent browsing or a fresh read-only verification.
@@ -427,7 +667,8 @@ int main(int argc, char **argv) {
         fs::remove_all(root);
         std::cout
             << "PASS TUI indexed history, historical knowledge, navigation, filters, evidence, verification, "
-               "resize, terminal restoration, signals, non-TTY rejection and read-only artifacts\n";
+               "labor records, new-run form with employment choice, resize, terminal restoration, signals, "
+               "non-TTY rejection and read-only artifacts\n";
         return 0;
     } catch (const std::exception &e) {
         std::cerr << "FAIL " << e.what() << " (fixtures retained in " << root << ")\n";

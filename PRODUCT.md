@@ -18,7 +18,7 @@ Existing C++20/CMake/CTest engine and CLI, with vendored JSON and offline Linux 
 
 Authoritative economic state and policy execution belong to the simulation core. Run artifacts include initial/final states, complete checkpoints, periodic display states, decisions, events, metrics and verification reports. Display snapshots contain less household knowledge than full states; unavailable knowledge must be disclosed rather than filled from later state. Earlier history for a continuation remains in its parent run.
 
-The requested TUI is an inspection interface. It must leave run files unchanged, preserve noninteractive JSON commands, and restore terminal settings on exit. No new graphical framework, service or network dependency is required.
+The TUI inspects completed runs and can launch new simulations with fixed or dynamic employment. It must leave existing run files unchanged, preserve noninteractive JSON commands, and restore terminal settings on exit. No new graphical framework, service or network dependency is required.
 
 ## Product Principles
 

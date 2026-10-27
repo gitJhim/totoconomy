@@ -6,7 +6,7 @@ The eight long-term areas are runtime/persistence; monetary/inventory accounting
 
 Implemented: C++20 library/CLI, offline dependency, checked cash and unit accounting, fixed employment/paid renewable or input recipes, immediate/full-fill trades, reservations/delays, real accounting/town scenarios, constrained observed-price policy, refresh/discovery/public board, bounded inventory price policy, streamed facts/evidence/metrics/display states, complete-boundary checkpoints, resume/no-op/board branches, strict paired comparison, independent ledger verifier, test gates, and benchmark measurement.
 
-Limited by design: employment stays fixed; inactivity has no permanent bankruptcy; one supplier per product; no order cancellation; notice discovery is free rather than a geographic search; no same-day checkout retry or substitution across products; display exports have daily resolution and no player. Verification independently reconciles records but does not independently regenerate all beliefs. These are explicit Stage 1 rules, not hidden placeholders.
+Limited by design: employment defaults to fixed; inactivity has no permanent bankruptcy; one supplier per product; no order cancellation; notice discovery is free rather than a geographic search; no same-day checkout retry or substitution across products; display exports have daily resolution and no player. Verification independently reconciles records but does not independently regenerate all beliefs. These are explicit Stage 1 rules, not hidden placeholders.
 
 Exit: clean offline source builds; exact accounting and synthetic town run; every documented acceptance gate executes in Debug/Release/sanitizer where supported; persisted evidence reconciles; continuous/resume/no-op histories match; the board experiment executes without a guaranteed preferred outcome; measured results and limitations are documented.
 
@@ -31,3 +31,7 @@ Deferred dependencies: 3D game engine, vehicle physics, multiplayer, backend/clo
 ## Interactive inspector increment
 
 A terminal investigation viewer is now implemented as a separate recorded-data consumer: per-day browsing, entities, decisions/events and linked evidence. This adds an initial part of Stage 5 investigation, without replacing the still-planned graphical presentation, synchronized visual branch comparisons, subday rendering or video export. See `TUI.md`.
+
+## Dynamic labor-market increment
+
+Implemented: optional dynamic staffing based on observed demand and payroll, advertised wage offers, eligibility and household preferences, applications and employer switching, layoffs with notice, employment histories, a perishable labor ledger, checkpoint/resume fidelity, and fixed/dynamic mode comparisons. The terminal inspector adds a new-run form, Labor and Ledger views. See [rules and integration review](employment.md). Permanent business closure and deeper production chains remain future work.

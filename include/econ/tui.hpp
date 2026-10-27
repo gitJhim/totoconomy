@@ -5,7 +5,7 @@
 namespace econ::tui {
 struct RunSummary {
     std::filesystem::path path;
-    std::string name, status, trace, seed, error;
+    std::string name, status, trace, seed, employment, error;
     Day from = 0, until = 0;
 };
 std::vector<RunSummary> discover(const std::filesystem::path &root);
@@ -42,7 +42,8 @@ class RunData {
   private:
     LogIndex replay_, metrics_, decisions_, events_;
 };
-enum class View { Runs, Overview, Entities, Decisions, Events };
+enum class View { Runs, Overview, Entities, Decisions, Events, Labor, Ledger };
+inline constexpr int view_count = 7;
 enum class Ink { Normal, Bold, Accent, Selected };
 struct Cell {
     char text = ' ';
@@ -64,13 +65,28 @@ struct Row {
     std::string id, label;
     Json record;
 };
+// Parameters for a simulation started from the inspector. Everything is plain text so the
+// form can be edited field by field; launch() validates through the same core run() as the CLI.
+struct LaunchForm {
+    std::string scenario, seed = "42", days = "60", employment = "fixed", trace = "audit",
+                          checkpoint_every = "15", name;
+    bool name_edited = false;
+};
 class Inspector {
   public:
     explicit Inspector(std::filesystem::path root, std::optional<std::filesystem::path> run = {});
     Frame render(int columns, int rows);
     bool key(const std::string &key);
+    // Text for an interim frame when this key will start slow work, or empty for none.
+    std::string wait_message(const std::string &key) const;
     View view() const {
         return view_;
+    }
+    bool form_open() const {
+        return form_;
+    }
+    const LaunchForm &form() const {
+        return form_values_;
     }
     Day boundary() const {
         return boundary_;
@@ -97,7 +113,16 @@ class Inspector {
     std::string detail_title_;
     std::size_t detail_scroll_ = 0, overview_scroll_ = 0;
     std::string prompt_, input_;
+    std::string ledger_entity_; // Ledger drill-down: empty = all entities, else that entity's transactions
+    bool form_ = false;
+    std::size_t form_field_ = 0;
+    LaunchForm form_values_;
+    std::vector<std::filesystem::path> scenario_choices_;
     void open(const std::filesystem::path &directory);
+    void open_form();
+    void form_key(const std::string &key);
+    void launch_form();
+    std::vector<std::string> form_lines() const;
     void refresh_runs();
     void select_view(View view);
     void set_boundary(Day day);
@@ -106,6 +131,8 @@ class Inspector {
     void submit_prompt();
     void activate();
     Json entity_record(const std::string &id) const;
+    Json day_flows(const std::string &id) const;
+    Money opening_cash(const std::string &id) const;
     std::vector<std::string> preview(const Row &row) const;
 };
 struct Options {

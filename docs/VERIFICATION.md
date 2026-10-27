@@ -29,3 +29,12 @@ Hard invariants are checked separately from expectations. Negative cash/physical
 The independent verifier starts from recorded opening state and applies validated operation effects in sequence. It validates each operation's expected effect shape, per-day labor/recipe/consumption accounting, exact arrival and invoice matching, final accounts, evolving prices, metrics, decision links and periodic display exports. It does not regenerate households' memories/policy choices or assert empirical realism. Those unavailable checks are identified in its output. The test suite separately proves policy information restrictions and deterministic re-execution. A self-consistent rewrite of all artifacts is not cryptographically authenticated by this system.
 
 Executed build/test and measured run results are recorded in `RESULTS.md` and `PERFORMANCE.md`. These records describe actual invocations, not unrun proposed commands.
+
+The labor-market increment adds tests for vacancy eligibility, wage offers, reservation wages,
+commute valuation, tenure, employer switching, notice and cancellation, negotiated payroll,
+staffing demand/inventory rules, perishable worker-days and per-person labor records. Regression
+cases cover zero and maximum capacity, large wage steps, zero-wage offer adjustments, unfunded
+openings, manifest mode labels, and consistent-but-false search evidence. Dynamic audit/summary,
+resume and no-op runs must match canonical state and economic facts; public-board branches must
+verify. Mode comparisons require a common day-zero endowment. TUI form focus is checked at
+60×18, 80×24 and 120×36. See [integration review](employment.md).

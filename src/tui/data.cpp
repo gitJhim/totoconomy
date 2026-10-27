@@ -33,6 +33,7 @@ static RunSummary summary(const fs::path &path) {
             throw Error(4, "unsupported run schema/model");
         row.status = m.at("status");
         row.trace = m.at("trace");
+        row.employment = m.value("employment", std::string("fixed"));
         row.seed = m.at("seed").dump();
         row.from = integer(m.at("from_day"));
         row.until = integer(m.at("until_day"));

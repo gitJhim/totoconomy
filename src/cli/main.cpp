@@ -11,8 +11,8 @@ void help() {
 Usage: econ COMMAND [options]
   tui       [--run DIR | --runs-dir DIR] [--no-color]
   validate  --scenario FILE [--json]
-  run       --scenario FILE --seed N --until-day D --out DIR
-  benchmark --scenario FILE --seed N --until-day D --out DIR [--json]
+  run       --scenario FILE --seed N --until-day D --out DIR [--employment fixed|dynamic]
+  benchmark --scenario FILE --seed N --until-day D --out DIR [--employment MODE] [--json]
   resume    --checkpoint FILE --until-day D --out DIR
   branch    --checkpoint FILE --intervention FILE --until-day D --out DIR
   verify    --run DIR [--json]
@@ -20,8 +20,15 @@ Usage: econ COMMAND [options]
   explain   --run DIR --decision ID [--json]
   compare   --baseline DIR --variant DIR --from-day D --until-day D [--json]
 Execution options: --trace audit|summary --checkpoint-every-days N --overwrite
+Employment: fixed (default) keeps every scenario job for the whole run. dynamic lets firms set
+  staffing from observed demand, stock-outs, capacity and payroll, advertise positions with wage
+  offers and eligibility rules on a vacancy board, and lets employed and unemployed households
+  apply by their own configurable job preferences; hires and switches start the next day and
+  every move records its reason. Payroll buys labor and production consumes it, as recorded
+  transactions. Resume/branch inherit the mode recorded in the checkpoint. See docs/employment.md.
 tui is interactive; other command results are JSON. Diagnostics go to stderr.
-Day D is exclusive. tui defaults to browsing ./runs and changes no run files.
+Day D is exclusive. tui defaults to browsing ./runs; it never modifies existing runs, and
+its n key starts a new run (scenario, seed, days, fixed/dynamic employment) in that directory.
 Exit codes: 0 success, 2 input/schema, 3 I/O, 4 incompatible persistence/comparison,
             5 accounting invariant/overflow, 6 internal error.
 )";
@@ -44,16 +51,20 @@ int main(int argc, char **argv) {
             if (cmd == "--help")
                 help();
             else
-                std::cout << "{\"version\":\"0.1.0\",\"model\":\"econ-1\",\"build\":\"" << ECON_BUILD
-                          << "\"}\n";
+                std::cout
+                    << Json{{"version", "0.1.0"}, {"model", model_version}, {"build", ECON_BUILD}}.dump()
+                    << '\n';
             return 0;
         }
         std::map<std::string, std::set<std::string>> allowed = {
             {"tui", {"run", "runs-dir", "no-color"}},
             {"validate", {"scenario", "json"}},
-            {"run", {"scenario", "seed", "until-day", "out", "trace", "checkpoint-every-days", "overwrite"}},
+            {"run",
+             {"scenario", "seed", "until-day", "out", "trace", "checkpoint-every-days", "overwrite",
+              "employment"}},
             {"benchmark",
-             {"scenario", "seed", "until-day", "out", "trace", "checkpoint-every-days", "overwrite", "json"}},
+             {"scenario", "seed", "until-day", "out", "trace", "checkpoint-every-days", "overwrite", "json",
+              "employment"}},
             {"resume", {"checkpoint", "until-day", "out", "trace", "checkpoint-every-days", "overwrite"}},
             {"branch",
              {"checkpoint", "intervention", "until-day", "out", "trace", "checkpoint-every-days",
@@ -137,6 +148,11 @@ int main(int argc, char **argv) {
             } else {
                 scenario = read_json(need("scenario"));
                 seed = static_cast<std::uint64_t>(parse_number(need("seed")));
+                if (flags.contains("employment")) {
+                    opt.employment = flags.at("employment");
+                    if (!valid_employment_mode(opt.employment))
+                        throw Error(2, "employment must be fixed or dynamic");
+                }
             }
             result = run(scenario, seed, opt);
         }
